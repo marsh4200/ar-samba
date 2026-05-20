@@ -11,6 +11,8 @@ User=sambacontrol
 Group=sambacontrol
 WorkingDirectory=/opt/sambacontrol/backend
 EnvironmentFile=/opt/sambacontrol/.env
+Environment="NPM_CONFIG_CACHE=/tmp/npm-cache"
+Environment="HOME=/tmp"
 ExecStart=/opt/sambacontrol/venv/bin/uvicorn app.main:app \
           --host 127.0.0.1 --port 9913 --proxy-headers --no-access-log
 
