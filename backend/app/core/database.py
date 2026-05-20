@@ -48,3 +48,15 @@ def init_db() -> None:
     from app.models import user, share, activity  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    def _enable_sqlite_wal() -> None:
+    """Enable WAL mode + busy_timeout on SQLite so the backend and updater
+    can write to the DB concurrently without 'database is locked' errors."""
+    if not settings.database_url.startswith("sqlite"):
+        return
+    with engine.connect() as conn:
+        conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+        conn.exec_driver_sql("PRAGMA busy_timeout=30000")
+        conn.commit()
+
+
+_enable_sqlite_wal()
