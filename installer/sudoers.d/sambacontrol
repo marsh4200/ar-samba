@@ -36,13 +36,12 @@ sambacontrol ALL=(root) NOPASSWD: /usr/bin/systemctl restart nmbd
 sambacontrol ALL=(root) NOPASSWD: /bin/systemctl reload smbd
 sambacontrol ALL=(root) NOPASSWD: /bin/systemctl restart smbd
 
-# --- Self-restart (needed by update.sh after pulling new code) ---
-sambacontrol ALL=(root) NOPASSWD: /usr/bin/systemctl restart sambacontrol-backend
-sambacontrol ALL=(root) NOPASSWD: /bin/systemctl restart sambacontrol-backend
+# --- Self-restart (deferred via systemd-run from fix.sh) ---
+sambacontrol ALL=(root) NOPASSWD: /usr/bin/systemd-run --quiet --on-active=5s --unit=sambacontrol-restart-once /bin/systemctl restart sambacontrol-backend
 sambacontrol ALL=(root) NOPASSWD: /usr/bin/systemctl daemon-reload
 sambacontrol ALL=(root) NOPASSWD: /bin/systemctl daemon-reload
 
-# --- nginx (needed by update.sh) ---
+# --- nginx (refresh during fix.sh) ---
 sambacontrol ALL=(root) NOPASSWD: /usr/sbin/nginx -t
 sambacontrol ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx
 sambacontrol ALL=(root) NOPASSWD: /bin/systemctl reload nginx
@@ -50,20 +49,8 @@ sambacontrol ALL=(root) NOPASSWD: /bin/systemctl reload nginx
 # --- sudoers refresh validation ---
 sambacontrol ALL=(root) NOPASSWD: /usr/sbin/visudo -c -f /etc/sudoers.d/sambacontrol
 
-# --- Updater scripts shipped by SambaControl ---
+# --- The GUI update button triggers fix.sh ---
+sambacontrol ALL=(root) NOPASSWD: /opt/sambacontrol/scripts/fix.sh
 sambacontrol ALL=(root) NOPASSWD: /opt/sambacontrol/update.sh
 sambacontrol ALL=(root) NOPASSWD: /opt/sambacontrol/scripts/rollback.sh
 sambacontrol ALL=(root) NOPASSWD: /opt/sambacontrol/scripts/backup.sh
-sambacontrol ALL=(root) NOPASSWD: /opt/sambacontrol/scripts/fix.sh
-
-# --- Belt-and-braces: allow scripts invoked via `bash <script>` too ---
-sambacontrol ALL=(root) NOPASSWD: /usr/bin/bash /opt/sambacontrol/update.sh
-sambacontrol ALL=(root) NOPASSWD: /usr/bin/bash /opt/sambacontrol/scripts/rollback.sh
-sambacontrol ALL=(root) NOPASSWD: /usr/bin/bash /opt/sambacontrol/scripts/backup.sh
-sambacontrol ALL=(root) NOPASSWD: /usr/bin/bash /opt/sambacontrol/scripts/fix.sh
-sambacontrol ALL=(root) NOPASSWD: /bin/bash /opt/sambacontrol/update.sh
-sambacontrol ALL=(root) NOPASSWD: /bin/bash /opt/sambacontrol/scripts/rollback.sh
-sambacontrol ALL=(root) NOPASSWD: /bin/bash /opt/sambacontrol/scripts/backup.sh
-sambacontrol ALL=(root) NOPASSWD: /bin/bash /opt/sambacontrol/scripts/fix.sh
-# --- Deferred-restart helper used by update.sh (avoids self-suicide) ---
-sambacontrol ALL=(root) NOPASSWD: /usr/bin/systemd-run --quiet --on-active=5s --unit=sambacontrol-restart-once /bin/systemctl restart sambacontrol-backend
