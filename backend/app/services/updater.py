@@ -3,9 +3,9 @@
 Flow:
 1. Check GitHub Releases for latest tag.
 2. If newer than current VERSION, start a job.
-3. Snapshot install_dir → backup_dir/<timestamp>
-4. Run scripts/_apply_update.sh (downloads, extracts, migrates, restarts).
-5. If anything fails, run scripts/_rollback.sh to restore the snapshot.
+3. Invoke scripts/fix.sh — it pulls, rebuilds, and restarts safely.
+4. fix.sh uses systemd-run --on-active=5s to defer the restart,
+   so it doesn't suicide its own parent (the backend).
 
 The job state lives in-memory; a single in-flight job is allowed.
 """
@@ -79,7 +79,7 @@ def is_newer(remote: str, local: str) -> bool:
 @dataclass
 class UpdateJob:
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
-    state: str = "idle"                 # idle | running | success | error
+    state: str = "idle"
     step: str = ""
     progress: int = 0
     logs: list[str] = field(default_factory=list)
@@ -90,19 +90,16 @@ class UpdateJob:
 
     def append(self, line: str) -> None:
         self.logs.append(line)
-        # Keep memory bounded
         if len(self.logs) > 2000:
             self.logs = self.logs[-1500:]
 
 
 _STEPS: list[tuple[str, int]] = [
-    ("Downloading update...",       15),
-    ("Extracting files...",         30),
-    ("Backing up current install...", 45),
-    ("Installing dependencies...",  65),
-    ("Running migrations...",       80),
-    ("Restarting services...",      92),
-    ("Cleaning up...",              98),
+    ("Pulling latest from GitHub...", 15),
+    ("Refreshing system configs...",  30),
+    ("Rebuilding frontend...",        65),
+    ("Restarting backend...",         90),
+    ("Verifying...",                  98),
 ]
 
 
@@ -124,25 +121,22 @@ class UpdateManager:
             job = UpdateJob(state="running", started_at=datetime.now(timezone.utc),
                             target_version=target_version, step="Preparing...")
             self._job = job
-        # Fire-and-forget
         thread = threading.Thread(target=self._run, args=(job,), daemon=True)
         thread.start()
         return job
 
     def _run(self, job: UpdateJob) -> None:
         settings = get_settings()
-        script = settings.install_dir / "update.sh"
+        # The GUI Update button triggers fix.sh, NOT update.sh.
+        # fix.sh is safe to run as a child of the backend (it uses
+        # systemd-run --on-active=5s for the restart, avoiding suicide).
+        script = settings.install_dir / "scripts" / "fix.sh"
         try:
             for label, pct in _STEPS:
                 job.step = label
                 job.progress = pct
                 job.append(f"==> {label}")
-            # Invoke the script DIRECTLY (not via `bash <script>`) so sudoers
-            # matches exactly. The script must be marked executable; install.sh
-            # and fix.sh both ensure that.
             argv = [str(script)]
-            if target := job.target_version:
-                argv.extend(["--version", target])
 
             for line in stream_run(argv, sudo=True, timeout=1800):
                 job.append(line)
@@ -155,15 +149,6 @@ class UpdateManager:
             job.error = str(e)
             job.state = "error"
             job.append(f"[ERROR] {e}")
-            # Rollback script (best effort)
-            rollback = settings.install_dir / "scripts" / "rollback.sh"
-            if rollback.exists():
-                job.append("==> Rolling back...")
-                try:
-                    for line in stream_run([str(rollback)], sudo=True, timeout=600):
-                        job.append(line)
-                except Exception as re:  # noqa: BLE001
-                    job.append(f"[ROLLBACK FAILED] {re}")
         finally:
             job.finished_at = datetime.now(timezone.utc)
 
