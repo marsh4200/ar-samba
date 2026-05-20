@@ -95,7 +95,7 @@ ok "venv up to date"
 say "Rebuilding frontend"
 pushd "$INSTALL_DIR/frontend" >/dev/null
 rm -rf node_modules package-lock.json dist
-npm install --no-audit --no-fund --loglevel=error
+npm install --no-audit --no-fund --loglevel=error --cache=/tmp/npm-cache
 [[ -f node_modules/vite/dist/node/cli.js ]] || fail "vite install incomplete (likely OOM)"
 npm run build
 [[ -f dist/index.html ]] || fail "frontend build produced no dist/index.html"
