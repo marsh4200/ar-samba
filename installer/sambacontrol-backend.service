@@ -1,0 +1,33 @@
+[Unit]
+Description=SambaControl backend (FastAPI)
+Documentation=https://github.com/marsh4200/ar-samba
+After=network-online.target smbd.service
+Wants=network-online.target
+Requires=smbd.service
+
+[Service]
+Type=simple
+User=sambacontrol
+Group=sambacontrol
+WorkingDirectory=/opt/sambacontrol/backend
+EnvironmentFile=/opt/sambacontrol/.env
+ExecStart=/opt/sambacontrol/venv/bin/uvicorn app.main:app \
+          --host 127.0.0.1 --port 9913 --proxy-headers --no-access-log
+
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=20s
+
+# Minimal hardening only. Anything that uses seccomp filters
+# (SystemCallArchitectures, RestrictNamespaces, ProtectKernel*, etc.)
+# implicitly enables NoNewPrivileges, which blocks sudo.
+# The real privilege boundary is /etc/sudoers.d/sambacontrol.
+PrivateTmp=true
+ProtectHome=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sambacontrol
+
+[Install]
+WantedBy=multi-user.target

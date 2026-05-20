@@ -1,0 +1,26 @@
+# Optional override for local development.
+#
+# Drop this in the repo root as `docker-compose.override.yml` (or merge into
+# your own `compose.dev.yml`) when you want hot reload during development.
+#
+# Usage:
+#   cp docker/compose.dev.yml docker-compose.override.yml
+#   docker compose up
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      SAMBACONTROL_DEV_MODE: "true"
+      SAMBACONTROL_LOG_LEVEL: "DEBUG"
+    volumes:
+      - ./backend/app:/app/app:ro
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 9913
+      --reload --proxy-headers
+
+  frontend:
+    ports:
+      - "9912:9912"

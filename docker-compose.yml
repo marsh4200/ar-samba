@@ -1,0 +1,62 @@
+# SambaControl — Docker Compose stack
+#
+# Most production deployments are better served by the native systemd install
+# (./install.sh) because Samba, ACLs, and user accounts integrate directly with
+# the host. This compose file is provided for evaluation and testing.
+#
+# Usage:
+#   docker compose up -d
+#   # then open  http://localhost:9912
+#
+# Note: For the backend to manage Samba on the host, it needs to share the
+# host's user database and Samba sockets. That's outside Docker's normal
+# scope — this stack therefore runs its OWN Samba inside the backend
+# container, which is fine for evaluation but NOT recommended for prod.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: sambacontrol/backend:latest
+    container_name: sambacontrol-backend
+    restart: unless-stopped
+    environment:
+      SAMBACONTROL_SECRET_KEY: "${SAMBACONTROL_SECRET_KEY:-please-set-in-.env}"
+      SAMBACONTROL_DATABASE_URL: "sqlite:////data/sambacontrol.db"
+      SAMBACONTROL_LOG_DIR: "/var/log/sambacontrol"
+      SAMBACONTROL_INSTALL_DIR: "/app"
+      SAMBACONTROL_BACKUP_DIR: "/data/backups"
+      SAMBACONTROL_SHARES_ROOT: "/srv/samba/shares"
+      SAMBACONTROL_SMB_CONF: "/etc/samba/smb.conf"
+      SAMBACONTROL_SMB_INCLUDE: "/etc/samba/sambacontrol.conf"
+      SAMBACONTROL_DEV_MODE: "${SAMBACONTROL_DEV_MODE:-true}"
+    volumes:
+      - sc-data:/data
+      - sc-logs:/var/log/sambacontrol
+      - sc-shares:/srv/samba/shares
+    expose:
+      - "9913"
+    networks: [sc-net]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: sambacontrol/frontend:latest
+    container_name: sambacontrol-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "9912:9912"
+    networks: [sc-net]
+
+networks:
+  sc-net:
+    driver: bridge
+
+volumes:
+  sc-data:
+  sc-logs:
+  sc-shares:
