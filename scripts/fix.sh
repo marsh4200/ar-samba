@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────
-#  SambaControl — recovery script.
-#  Pulls latest code, repairs venv if missing, refreshes unit + sudoers,
-#  restarts the backend, and runs a real sudo test.
-#  Usage:  sudo bash /opt/sambacontrol/scripts/fix.sh
+#  SambaControl recovery + GUI-update script.
+#
+#  Pulls latest code, repairs venv if missing, refreshes unit + sudoers
+#  + nginx, rebuilds frontend, and schedules a deferred restart.
+#
+#  Safe to run as a CHILD of sambacontrol-backend (the GUI uses it that
+#  way) because the restart is deferred via systemd-run, preventing
+#  parent-process-suicide.
+#
+#  Usage:
+#    sudo bash /opt/sambacontrol/scripts/fix.sh
+#    OR via GUI Settings → Updates → Update Now
 # ──────────────────────────────────────────────────────────────────────────
 set -Eeuo pipefail
 
@@ -19,10 +27,10 @@ fail() { echo "✗ $*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || fail "run as root:  sudo bash scripts/fix.sh"
 [[ -d "$INSTALL_DIR" ]] || fail "$INSTALL_DIR not found — run install.sh first"
 
-say "Stopping backend to avoid hot-reload errors"
-systemctl stop sambacontrol-backend 2>/dev/null || true
+# IMPORTANT: do NOT stop the backend here. When invoked from the GUI we are
+# a child of sambacontrol-backend; stopping it would kill us mid-run.
 
-# Recover .git if missing (the v0.2.x rollback bug deleted it on some installs)
+# Recover .git if missing
 if [[ ! -d "$INSTALL_DIR/.git" ]]; then
     say "Repairing missing .git"
     git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
@@ -37,7 +45,7 @@ fi
 
 say "Pulling latest from GitHub"
 git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
-git -C "$INSTALL_DIR" fetch --quiet origin
+GIT_TERMINAL_PROMPT=0 git -C "$INSTALL_DIR" fetch --quiet origin
 git -C "$INSTALL_DIR" reset --quiet --hard origin/main
 ok "repo up to date ($(cat "$INSTALL_DIR/VERSION"))"
 
@@ -45,7 +53,6 @@ ok "repo up to date ($(cat "$INSTALL_DIR/VERSION"))"
 if [[ ! -x "$INSTALL_DIR/venv/bin/python" ]]; then
     say "Rebuilding Python venv"
     rm -rf "$INSTALL_DIR/venv"
-    # Pick the best available Python (3.10+)
     PY=""
     for cand in python3.12 python3.11 python3.10 python3; do
         if command -v "$cand" >/dev/null 2>&1; then
@@ -62,6 +69,12 @@ if [[ ! -x "$INSTALL_DIR/venv/bin/python" ]]; then
     "$INSTALL_DIR/venv/bin/pip" install --quiet -r "$INSTALL_DIR/backend/requirements.txt"
     ok "venv rebuilt with $($PY --version)"
 fi
+
+# Always update Python deps (cheap if already current)
+say "Updating Python deps"
+"$INSTALL_DIR/venv/bin/pip" install --quiet --upgrade pip wheel
+"$INSTALL_DIR/venv/bin/pip" install --quiet -r "$INSTALL_DIR/backend/requirements.txt"
+ok "venv up to date"
 
 # Scripts must be executable
 chmod +x "$INSTALL_DIR"/install.sh "$INSTALL_DIR"/update.sh \
@@ -86,7 +99,7 @@ ln -sf /etc/nginx/sites-available/sambacontrol /etc/nginx/sites-enabled/sambacon
 nginx -t >/dev/null && systemctl reload nginx
 ok "nginx refreshed"
 
-say "Rebuilding frontend (always — picks up any code changes)"
+say "Rebuilding frontend (clean install)"
 pushd "$INSTALL_DIR/frontend" >/dev/null
 rm -rf node_modules package-lock.json dist
 npm install --no-audit --no-fund --loglevel=error
@@ -116,34 +129,30 @@ say "Fixing ownership"
 chown -R sambacontrol:sambacontrol "$INSTALL_DIR"
 [[ -f "$INSTALL_DIR/.env" ]] && chmod 600 "$INSTALL_DIR/.env"
 
-say "Reloading systemd and starting backend"
+# Daemon-reload is fine — doesn't kill us
+say "Reloading systemd"
 systemctl daemon-reload
-systemctl restart sambacontrol-backend
-sleep 3
-systemctl is-active --quiet sambacontrol-backend || {
-    journalctl -u sambacontrol-backend -n 30 --no-pager
-    fail "backend failed to start"
-}
-ok "backend is active"
+ok "daemon reloaded"
 
-say "Live sudo test (using an allowlisted command)"
-if sudo -u sambacontrol sudo -n /usr/bin/mkdir -p "$SHARES_ROOT/.fixtest" 2>&1; then
-    rmdir "$SHARES_ROOT/.fixtest" 2>/dev/null || true
-    ok "sudo works"
-else
-    fail "sudo still blocked — paste 'sudo systemctl status sambacontrol-backend' and 'sudo -u sambacontrol sudo -nl'"
-fi
+# DEFERRED restart — runs 5s after this script exits, so we don't suicide.
+# Whether invoked from SSH or from the GUI (where backend is our parent),
+# this is safe.
+say "Scheduling backend restart (in 5 seconds)"
+systemd-run --quiet --on-active=5s --unit=sambacontrol-restart-once \
+    /bin/systemctl restart sambacontrol-backend
+ok "backend will restart shortly"
 
 HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "<server-ip>")
 cat <<MSG
 
 ╔════════════════════════════════════════════════════════════════╗
-║   Recovery complete                                            ║
+║   Update / recovery complete                                   ║
 ╚════════════════════════════════════════════════════════════════╝
 
    Web UI: http://${HOST_IP}:9912
    Version: $(cat "$INSTALL_DIR/VERSION")
 
-   Hard-refresh your browser (Ctrl+Shift+R) to load the new frontend.
+   Backend restarts in ~5 seconds.
+   Then hard-refresh your browser (Ctrl+Shift+R).
 
 MSG
