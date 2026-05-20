@@ -49,3 +49,39 @@ def dashboard(db: Annotated[Session, Depends(get_db)], _u: CurrentUser) -> Dashb
 def trigger_reload(db: Annotated[Session, Depends(get_db)], actor: CurrentUser) -> None:
     reload_samba()
     log_activity(db, actor=actor.username, category="samba", action="reload")
+    @router.get("/idle-timeout", response_model=dict)
+def get_idle_timeout(_: AdminUser = Depends(get_current_admin)) -> dict:
+    """Return the configured idle-logout timeout in minutes (0 = disabled)."""
+    return {"minutes": get_settings().idle_timeout_minutes}
+
+
+@router.put("/idle-timeout", response_model=dict)
+def set_idle_timeout(
+    payload: dict,
+    _: AdminUser = Depends(get_current_admin),
+) -> dict:
+    """Update the idle-logout timeout (writes to the .env file)."""
+    from pathlib import Path
+    import re
+
+    minutes = int(payload.get("minutes", 15))
+    if minutes < 0 or minutes > 1440:
+        from fastapi import HTTPException
+        raise HTTPException(400, "minutes must be 0-1440")
+
+    env_path = Path("/opt/sambacontrol/.env")
+    if not env_path.exists():
+        from fastapi import HTTPException
+        raise HTTPException(500, ".env not found")
+
+    text = env_path.read_text()
+    line = f"SAMBACONTROL_IDLE_TIMEOUT_MINUTES={minutes}"
+    if re.search(r"^SAMBACONTROL_IDLE_TIMEOUT_MINUTES=", text, re.M):
+        text = re.sub(r"^SAMBACONTROL_IDLE_TIMEOUT_MINUTES=.*$", line, text, flags=re.M)
+    else:
+        text = text.rstrip() + f"\n{line}\n"
+    env_path.write_text(text)
+
+    # Update the live in-memory setting so next /idle-timeout read returns it
+    get_settings().idle_timeout_minutes = minutes
+    return {"minutes": minutes}
