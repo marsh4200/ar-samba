@@ -1,24 +1,14 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────
-#  SambaControl updater — v0.5.0 design
+#  SambaControl updater — v0.5.1 design
 #
-#  Safe-by-design philosophy:
-#    1. Stop the backend FIRST (so DB locks release, no hot-reload mid-update)
-#    2. Snapshot only the things git owns (code), not the heavy generated stuff
-#    3. Pull new code via git
-#    4. Reinstall Python deps (always full, no caching weirdness)
-#    5. Rebuild frontend (always nuke node_modules first)
-#    6. Run migrations (backend is stopped, no DB lock)
-#    7. Start the backend
-#    8. Health-probe
-#    9. On any failure: restore the snapshot, restart, exit nonzero
-#
-#  This script does NOT touch /etc/systemd, /etc/sudoers.d, or /etc/nginx
-#  during update. Those only change via a fresh install.sh run.
+#  Does NOT stop the backend (the GUI runs this script AS the backend's
+#  child process — stopping the backend would kill update.sh itself).
+#  SQLite handles concurrent access via WAL + busy_timeout.
 #
 #  Usage:
 #    sudo /opt/sambacontrol/update.sh                  # update to latest
-#    sudo /opt/sambacontrol/update.sh --version 0.5.0  # specific tag
+#    sudo /opt/sambacontrol/update.sh --version 0.5.1  # specific tag
 # ──────────────────────────────────────────────────────────────────────────
 set -Eeuo pipefail
 
@@ -48,16 +38,11 @@ TS=$(date -u +%Y%m%d-%H%M%S)
 BACKUP_DIR=${BACKUP_ROOT}/${TS}
 mkdir -p "$BACKUP_ROOT"
 
-# What we snapshot — just the bare minimum needed to revert if anything fails.
-# Heavy stuff (venv, node_modules, dist) is regenerated from scratch so there's
-# no point in snapshotting it. data/.env/backups are NEVER in scope.
 snapshot() {
     say "Snapshotting current install → ${BACKUP_DIR}"
     mkdir -p "$BACKUP_DIR"
-    # Record the current git commit so we can revert to it
     git -C "$INSTALL_DIR" rev-parse HEAD > "$BACKUP_DIR/git-head" 2>/dev/null || \
         echo "unknown" > "$BACKUP_DIR/git-head"
-    # Copy VERSION
     cp "$INSTALL_DIR/VERSION" "$BACKUP_DIR/VERSION" 2>/dev/null || true
     ok "snapshot written"
 }
@@ -67,28 +52,20 @@ rollback() {
     prev_head=$(cat "$BACKUP_DIR/git-head" 2>/dev/null || echo "")
     warn "ROLLING BACK"
     if [[ -n "$prev_head" && "$prev_head" != "unknown" ]]; then
-        git -C "$INSTALL_DIR" reset --hard "$prev_head" 2>/dev/null || \
-            warn "git reset failed"
+        git -C "$INSTALL_DIR" reset --hard "$prev_head" 2>/dev/null || warn "git reset failed"
         chmod +x "$INSTALL_DIR"/install.sh "$INSTALL_DIR"/update.sh \
                  "$INSTALL_DIR"/uninstall.sh "$INSTALL_DIR"/scripts/*.sh 2>/dev/null || true
         warn "code reverted to ${prev_head:0:8}"
     fi
-    systemctl start sambacontrol-backend 2>/dev/null || true
     exit 1
 }
 trap 'rollback' ERR
 
 snapshot
 
-# ---- 1. Stop backend so DB locks release ---------------------------------
-say "Stopping backend"
-systemctl stop sambacontrol-backend
-ok "backend stopped"
-
-# ---- 2. Pull code --------------------------------------------------------
+# ---- 1. Pull code --------------------------------------------------------
 say "Fetching latest from origin/${BRANCH}"
 git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
-# Force fetch even if remote returns unrelated; never prompt
 GIT_TERMINAL_PROMPT=0 git -C "$INSTALL_DIR" fetch --quiet origin
 
 if [[ -n "$TARGET_VERSION" ]]; then
@@ -102,39 +79,37 @@ else
     ok "fast-forwarded to origin/${BRANCH}"
 fi
 
-# Scripts must stay executable after every pull
 chmod +x "$INSTALL_DIR"/install.sh "$INSTALL_DIR"/update.sh \
          "$INSTALL_DIR"/uninstall.sh "$INSTALL_DIR"/scripts/*.sh 2>/dev/null || true
 
 NEW_VERSION=$(cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo unknown)
 say "Installing v${NEW_VERSION}"
 
-# ---- 3. Python deps ------------------------------------------------------
+# ---- 2. Python deps ------------------------------------------------------
 say "Updating Python dependencies"
 "$INSTALL_DIR/venv/bin/pip" install --quiet --upgrade pip wheel
 "$INSTALL_DIR/venv/bin/pip" install --quiet -r "$INSTALL_DIR/backend/requirements.txt"
 ok "venv up to date"
 
-# ---- 4. Frontend (NUKE node_modules every time to prevent OOM corruption) -
+# ---- 3. Frontend (full clean install every time) -------------------------
 say "Rebuilding frontend"
 pushd "$INSTALL_DIR/frontend" >/dev/null
 rm -rf node_modules package-lock.json dist
 npm install --no-audit --no-fund --loglevel=error
-# Verify vite installed completely; if not, fail loudly
 [[ -f node_modules/vite/dist/node/cli.js ]] || fail "vite install incomplete (likely OOM)"
 npm run build
 [[ -f dist/index.html ]] || fail "frontend build produced no dist/index.html"
 popd >/dev/null
 ok "frontend rebuilt"
 
-# ---- 5. Migrations (backend is stopped, so no DB lock contention) --------
+# ---- 4. Migrations (SQLite WAL + busy_timeout handle concurrency) -------
 say "Running migrations"
 pushd "$INSTALL_DIR/backend" >/dev/null
 "$INSTALL_DIR/venv/bin/python" -c "from app.core.database import init_db; init_db()"
 popd >/dev/null
 ok "schema applied"
 
-# ---- 6. Ownership --------------------------------------------------------
+# ---- 5. Ownership --------------------------------------------------------
 chown -R sambacontrol:sambacontrol \
       "$INSTALL_DIR/backend" \
       "$INSTALL_DIR/frontend/dist" \
@@ -144,24 +119,17 @@ chown -R sambacontrol:sambacontrol \
       "$INSTALL_DIR/installer" \
       "$INSTALL_DIR/VERSION" 2>/dev/null || true
 
-# ---- 7. Start backend ----------------------------------------------------
-say "Starting backend"
-systemctl start sambacontrol-backend
-sleep 3
+# ---- 6. Schedule a deferred restart ---------------------------------------
+# We CAN'T `systemctl restart sambacontrol-backend` directly because we ARE
+# a child of sambacontrol-backend (the GUI launched us). systemd would kill
+# us along with the parent. Instead schedule a one-shot transient unit that
+# runs the restart 5 seconds from now, AFTER this script has exited.
+say "Scheduling deferred restart"
+systemd-run --quiet --on-active=5s --unit=sambacontrol-restart-once \
+    /bin/systemctl restart sambacontrol-backend
+ok "backend will restart in 5 seconds"
 
-# ---- 8. Health probe -----------------------------------------------------
-for i in 1 2 3 4 5; do
-    if curl -fsS http://127.0.0.1:9913/api/health >/dev/null 2>&1; then
-        ok "backend healthy"
-        break
-    fi
-    if (( i == 5 )); then
-        fail "post-update health probe failed after 5 retries"
-    fi
-    sleep 2
-done
-
-# ---- 9. Prune old snapshots (keep last 5) --------------------------------
+# ---- 7. Prune old snapshots (keep last 5) --------------------------------
 say "Cleaning up old snapshots"
 mapfile -t OLD < <(ls -1dt "${BACKUP_ROOT}"/2* 2>/dev/null | tail -n +6 || true)
 for d in "${OLD[@]}"; do
@@ -170,4 +138,4 @@ done
 ok "kept the 5 most recent snapshots"
 
 trap - ERR
-say "Update to v${NEW_VERSION} complete"
+say "Update to v${NEW_VERSION} complete — backend restarting"
