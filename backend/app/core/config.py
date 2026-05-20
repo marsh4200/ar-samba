@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # Security
     secret_key: str = "INSECURE-CHANGE-ME"
     jwt_alg: str = "HS256"
-    access_token_minutes: int = 30
+    idle_timeout_minutes: int = 15
     refresh_token_days: int = 14
 
     # Database
