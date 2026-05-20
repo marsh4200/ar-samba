@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Download, RefreshCw, CheckCircle2, AlertCircle, GitBranch, ExternalLink, Sparkles,
+  Download, RefreshCw, CheckCircle2, AlertCircle, GitBranch, ExternalLink, Sparkles, Clock,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
@@ -51,6 +51,9 @@ export default function SettingsPage() {
           <dd className="col-span-2"><span className="badge-muted">{user?.role}</span></dd>
         </dl>
       </section>
+
+      {/* Auto-logout */}
+      {isAdmin && <IdleTimeoutSection toast={toast} />}
 
       {/* Updates */}
       <section className="card">
@@ -282,5 +285,73 @@ function UpdaterModal({ open, onOpenChange, target, onFinished }) {
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+
+// ─── Auto-logout (idle timeout) ─────────────────────────────────────────────
+function IdleTimeoutSection({ toast }) {
+  const { setIdleMinutes } = useAuth();
+  const [minutes, setMinutes] = useState(15);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/system/idle-timeout')
+      .then((res) => { if (!cancelled) setMinutes(res?.minutes ?? 15); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function save(e) {
+    e?.preventDefault?.();
+    const v = Math.max(0, Math.min(1440, Number(minutes) || 0));
+    setSaving(true);
+    try {
+      const res = await api.put('/system/idle-timeout', { minutes: v });
+      const saved = res?.minutes ?? v;
+      setMinutes(saved);
+      setIdleMinutes(saved); // update live timer in AuthContext
+      toast.success(saved === 0 ? 'Auto-logout disabled' : `Auto-logout set to ${saved} min`);
+    } catch (err) {
+      toast.error('Could not save', err?.message || String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="card">
+      <div className="mb-4">
+        <h2 className="text-base font-semibold flex items-center gap-2">
+          <Clock className="w-4 h-4 text-brand-400" />
+          Auto-logout
+        </h2>
+        <p className="text-sm text-neutral-400 mt-1">
+          Log out automatically after this many minutes without activity.
+          Set to <span className="font-mono">0</span> to disable.
+        </p>
+      </div>
+
+      <form onSubmit={save} className="flex items-center gap-3">
+        <input
+          type="number"
+          min={0}
+          max={1440}
+          step={1}
+          disabled={loading || saving}
+          value={minutes}
+          onChange={(e) => setMinutes(e.target.value)}
+          className="w-28 rounded-md border border-white/10 bg-bg-soft px-3 py-2 text-sm font-mono
+                     focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+        />
+        <span className="text-sm text-neutral-500">minutes</span>
+        <button type="submit" className="btn-primary" disabled={loading || saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </form>
+    </section>
   );
 }

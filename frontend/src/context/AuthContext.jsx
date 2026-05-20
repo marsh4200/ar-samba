@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { api, clearTokens, getAccessToken, setTokens } from '@/lib/api';
 
 const AuthContext = createContext(null);
@@ -11,8 +11,9 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [initialised, setInitialised] = useState(null); // null=loading, true/false
+  const [initialised, setInitialised] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [idleMinutes, setIdleMinutes] = useState(15);
 
   const refreshSelf = useCallback(async () => {
     if (!getAccessToken()) {
@@ -63,8 +64,43 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  // ─── Idle-logout: fetch the configured timeout once logged in ────────────
+  useEffect(() => {
+    if (!user) return;
+    api.get('/system/idle-timeout')
+      .then((res) => setIdleMinutes(res?.minutes ?? 15))
+      .catch(() => {});
+  }, [user]);
+
+  // ─── Idle-logout: reset timer on user activity, fire after N minutes ────
+  const timerRef = useRef(null);
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const reset = () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (idleMinutes <= 0) return;            // 0 disables auto-logout
+      timerRef.current = setTimeout(() => {
+        console.warn(`Idle for ${idleMinutes} minutes — logging out`);
+        logout();
+      }, idleMinutes * 60 * 1000);
+    };
+
+    reset();
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll', 'mousemove'];
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      events.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, [user, idleMinutes, logout]);
+
   return (
-    <AuthContext.Provider value={{ user, initialised, loading, login, firstRunSetup, logout, refreshSelf }}>
+    <AuthContext.Provider value={{
+      user, initialised, loading, login, firstRunSetup, logout, refreshSelf,
+      idleMinutes, setIdleMinutes,
+    }}>
       {children}
     </AuthContext.Provider>
   );
