@@ -38,11 +38,24 @@ class ShareSpec:
 
 def render_include_file(shares: list[ShareSpec]) -> str:
     """Render the SambaControl-managed include file."""
+    settings = get_settings()
     lines: list[str] = [
         "# === SambaControl managed file ===",
         "# DO NOT EDIT BY HAND — overwritten on every share change.",
         "",
     ]
+    # Global tunables that go in the [global] section. These are SAFE to
+    # place in an included file because Samba merges them into the main
+    # [global] block at config parse time.
+    dead = max(0, int(settings.smb_deadtime_minutes or 0))
+    if dead > 0:
+        lines.extend([
+            "[global]",
+            "   # Disconnect idle SMB sessions (with no open files) after N minutes.",
+            f"   deadtime = {dead}",
+            "   keepalive = 60",
+            "",
+        ])
     for s in shares:
         lines.append(f"[{s.name}]")
         if s.comment:

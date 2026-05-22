@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     access_token_minutes: int = 60          # JWT access token lifetime
     refresh_token_days: int = 14
     idle_timeout_minutes: int = 15          # Frontend auto-logout after inactivity (0 = disabled)
+    smb_deadtime_minutes: int = 0           # Server-side Samba session timeout (0 = disabled)
 
     # Database
     database_url: str = "sqlite:////opt/sambacontrol/data/sambacontrol.db"

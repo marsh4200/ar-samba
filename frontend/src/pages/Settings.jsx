@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Download, RefreshCw, CheckCircle2, AlertCircle, GitBranch, ExternalLink, Sparkles, Clock,
+  Download, RefreshCw, CheckCircle2, AlertCircle, GitBranch, ExternalLink, Sparkles, Clock, Network,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
@@ -54,6 +54,9 @@ export default function SettingsPage() {
 
       {/* Auto-logout */}
       {isAdmin && <IdleTimeoutSection toast={toast} />}
+
+      {/* SMB session deadtime */}
+      {isAdmin && <SmbDeadtimeSection toast={toast} />}
 
       {/* Updates */}
       <section className="card">
@@ -332,6 +335,81 @@ function IdleTimeoutSection({ toast }) {
         <p className="text-sm text-neutral-400 mt-1">
           Log out automatically after this many minutes without activity.
           Set to <span className="font-mono">0</span> to disable.
+        </p>
+      </div>
+
+      <form onSubmit={save} className="flex items-center gap-3">
+        <input
+          type="number"
+          min={0}
+          max={1440}
+          step={1}
+          disabled={loading || saving}
+          value={minutes}
+          onChange={(e) => setMinutes(e.target.value)}
+          className="w-28 rounded-md border border-white/10 bg-bg-soft px-3 py-2 text-sm font-mono
+                     focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+        />
+        <span className="text-sm text-neutral-500">minutes</span>
+        <button type="submit" className="btn-primary" disabled={loading || saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+
+// ─── SMB session deadtime (server-side, Windows clients) ───────────────────
+function SmbDeadtimeSection({ toast }) {
+  const [minutes, setMinutes] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/system/smb-deadtime')
+      .then((res) => { if (!cancelled) setMinutes(res?.minutes ?? 0); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function save(e) {
+    e?.preventDefault?.();
+    const v = Math.max(0, Math.min(1440, Number(minutes) || 0));
+    setSaving(true);
+    try {
+      const res = await api.put('/system/smb-deadtime', { minutes: v });
+      const saved = res?.minutes ?? v;
+      setMinutes(saved);
+      toast.success(
+        saved === 0
+          ? 'SMB auto-disconnect disabled'
+          : `Idle SMB sessions will disconnect after ${saved} min`,
+      );
+    } catch (err) {
+      toast.error('Could not save', err?.message || String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="card">
+      <div className="mb-4">
+        <h2 className="text-base font-semibold flex items-center gap-2">
+          <Network className="w-4 h-4 text-brand-400" />
+          Disconnect idle Windows clients
+        </h2>
+        <p className="text-sm text-neutral-400 mt-1">
+          Tell Samba to drop network-drive connections that have been idle for this many minutes.
+          Set to <span className="font-mono">0</span> to disable.
+          <br />
+          <span className="text-xs text-neutral-500">
+            Only kicks clients with <strong>no open files</strong>. Windows will silently
+            reconnect on the next access using its saved credentials.
+          </span>
         </p>
       </div>
 
