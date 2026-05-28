@@ -87,7 +87,10 @@ export function AuthProvider({ children }) {
     };
 
     reset();
-    const events = ['mousedown', 'keydown', 'touchstart', 'scroll', 'mousemove'];
+    // NOTE: deliberately exclude 'mousemove' and 'scroll' — they fire near-continuously
+    // (cursor drift, momentum scroll) and would keep resetting the timer so it never
+    // reaches the deadline, effectively disabling auto-logout. Use discrete intent events.
+    const events = ['mousedown', 'keydown', 'touchstart', 'wheel', 'visibilitychange'];
     events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
 
     return () => {

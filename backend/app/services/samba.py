@@ -47,13 +47,18 @@ def render_include_file(shares: list[ShareSpec]) -> str:
     # Global tunables that go in the [global] section. These are SAFE to
     # place in an included file because Samba merges them into the main
     # [global] block at config parse time.
+    # Global tunables. These MUST be merged into the main [global] block, which
+    # only happens if our `include =` line sits *inside* [global] in smb.conf
+    # (handled by _ensure_include_line). We therefore do NOT open our own
+    # [global] section here — doing so would NOT merge and Samba would ignore
+    # `deadtime`. We emit the bare parameters first, before any share section,
+    # so they belong to [global] when included from within it.
     dead = max(0, int(settings.smb_deadtime_minutes or 0))
     if dead > 0:
         lines.extend([
-            "[global]",
-            "   # Disconnect idle SMB sessions (with no open files) after N minutes.",
-            f"   deadtime = {dead}",
-            "   keepalive = 60",
+            "# Disconnect idle SMB sessions (with no open files) after N minutes.",
+            f"deadtime = {dead}",
+            "keepalive = 60",
             "",
         ])
     for s in shares:
@@ -89,7 +94,12 @@ def write_smb_include(shares: list[ShareSpec]) -> None:
         # `testparm -s` on the include alone will warn about no [global] —
         # so we test by including it into a throwaway main file.
         check_main = tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False)
-        check_main.write(f"[global]\n   workgroup = WORKGROUP\n   security = user\n\ninclude = {tmp_path}\n")
+        check_main.write(
+            "[global]\n"
+            "   workgroup = WORKGROUP\n"
+            "   security = user\n"
+            f"   include = {tmp_path}\n"
+        )
         check_main.flush()
         check_main_path = Path(check_main.name)
         check_main.close()
@@ -108,7 +118,12 @@ def write_smb_include(shares: list[ShareSpec]) -> None:
 
 
 def _ensure_include_line() -> None:
-    """Make sure /etc/samba/smb.conf includes our managed file."""
+    """Make sure /etc/samba/smb.conf includes our managed file *inside* [global].
+
+    The include MUST live within the [global] section, otherwise global tunables
+    in the managed file (e.g. `deadtime`) are not merged into Samba's global
+    config and are silently ignored.
+    """
     settings = get_settings()
     marker = f"include = {settings.smb_include}"
     try:
@@ -117,7 +132,36 @@ def _ensure_include_line() -> None:
         current = ""
     if marker in current:
         return
-    appended = (current.rstrip() + f"\n\n# Added by SambaControl\n{marker}\n").lstrip()
+
+    lines = current.splitlines()
+    out: list[str] = []
+    inserted = False
+    in_global = False
+    for line in lines:
+        stripped = line.strip()
+        is_section = stripped.startswith("[") and stripped.endswith("]")
+        # When we hit the start of any section after having entered [global],
+        # insert our include just before leaving [global].
+        if is_section and in_global and not inserted:
+            out.append(f"   # Added by SambaControl")
+            out.append(f"   {marker}")
+            inserted = True
+        out.append(line)
+        if is_section:
+            in_global = stripped.lower() == "[global]"
+
+    # If [global] was the last section (no section after it), append inside it.
+    if in_global and not inserted:
+        out.append(f"   # Added by SambaControl")
+        out.append(f"   {marker}")
+        inserted = True
+
+    # No [global] section at all — create one with the include.
+    if not inserted:
+        header = ["[global]", f"   # Added by SambaControl", f"   {marker}", ""]
+        out = header + out
+
+    appended = ("\n".join(out)).strip() + "\n"
     # Write through sudo
     with tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False) as tmp:
         tmp.write(appended)
