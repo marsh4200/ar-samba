@@ -6,7 +6,7 @@ export default function ProtectedRoute() {
   const { user, loading, initialised } = useAuth();
   const loc = useLocation();
 
-  if (loading) return <FullScreenLoader />;
+  if (loading) return <FullScreenLoader label="Checking your session" />;
   if (!initialised) return <Navigate to="/setup" replace />;
   if (!user) return <Navigate to="/login" replace state={{ from: loc }} />;
   return <Outlet />;

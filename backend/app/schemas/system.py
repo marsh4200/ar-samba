@@ -42,6 +42,25 @@ class ActivityOut(BaseModel):
 DashboardOut.model_rebuild()
 
 
+class HostMetrics(BaseModel):
+    """Live host telemetry for the dashboard gauges."""
+    hostname: str
+    kernel: str
+    cpu_percent: float
+    cpu_cores: int
+    cpu_threads: int
+    load_1: float
+    load_5: float
+    load_15: float
+    memory_total: int
+    memory_used: int
+    memory_percent: float
+    swap_total: int
+    swap_used: int
+    swap_percent: float
+    uptime_seconds: int
+
+
 class VersionInfo(BaseModel):
     current: str
     latest: str | None = None

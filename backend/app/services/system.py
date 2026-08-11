@@ -37,3 +37,40 @@ def storage_for_shares_root() -> list[dict]:
 def host_uptime_seconds() -> int:
     import time
     return int(time.time() - psutil.boot_time())
+
+
+def host_metrics() -> dict:
+    """Live CPU / memory / load / uptime for the dashboard gauges.
+
+    Uses the already-vendored psutil. ``cpu_percent`` is called non-blocking so
+    the request never stalls; it reports usage since the previous call, which
+    is exactly what a polling dashboard wants.
+    """
+    import platform
+    import socket
+
+    vm = psutil.virtual_memory()
+    sm = psutil.swap_memory()
+
+    try:
+        load1, load5, load15 = psutil.getloadavg()
+    except (AttributeError, OSError):  # not available on every platform
+        load1 = load5 = load15 = 0.0
+
+    return {
+        "hostname": socket.gethostname(),
+        "kernel": platform.release(),
+        "cpu_percent": round(psutil.cpu_percent(interval=None), 1),
+        "cpu_cores": psutil.cpu_count(logical=False) or 0,
+        "cpu_threads": psutil.cpu_count(logical=True) or 0,
+        "load_1": round(load1, 2),
+        "load_5": round(load5, 2),
+        "load_15": round(load15, 2),
+        "memory_total": vm.total,
+        "memory_used": vm.total - vm.available,
+        "memory_percent": round(vm.percent, 1),
+        "swap_total": sm.total,
+        "swap_used": sm.used,
+        "swap_percent": round(sm.percent, 1),
+        "uptime_seconds": host_uptime_seconds(),
+    }

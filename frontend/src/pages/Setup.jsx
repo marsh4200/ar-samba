@@ -1,9 +1,68 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Sparkles, ArrowRight, Check } from 'lucide-react';
+import { ArrowRight, Check, KeyRound, ShieldCheck, UserCog } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { Spinner } from '@/components/ui/Spinner';
+import { AuthShell, AuthHeading } from '@/components/layout/AuthShell';
+import { Button } from '@/components/ui/Button';
+import { Field, Input, PasswordInput } from '@/components/ui/Field';
+import { cn } from '@/lib/utils';
+
+const POINTS = [
+  {
+    icon: UserCog,
+    label: 'This account administers the server',
+    hint: 'It signs in to AR Samba. It is not a Samba file-share account.',
+  },
+  {
+    icon: KeyRound,
+    label: 'Choose a password you can recover',
+    hint: 'There is no email reset — recovery means server access.',
+  },
+  {
+    icon: ShieldCheck,
+    label: 'Everything after this is logged',
+    hint: 'Actions are attributed to the account that performed them.',
+  },
+];
+
+/** Strength is advisory only — the server enforces the 8-character minimum. */
+function scorePassword(pw) {
+  if (!pw) return 0;
+  let s = 0;
+  if (pw.length >= 8) s++;
+  if (pw.length >= 14) s++;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
+  if (/\d/.test(pw)) s++;
+  if (/[^A-Za-z0-9]/.test(pw)) s++;
+  return Math.min(s, 4);
+}
+
+const STRENGTH = [
+  { label: '',          bar: '',           text: '' },
+  { label: 'Weak',      bar: 'bg-crit',    text: 'text-crit' },
+  { label: 'Fair',      bar: 'bg-warn',    text: 'text-warn' },
+  { label: 'Good',      bar: 'bg-signal-400', text: 'text-signal-400' },
+  { label: 'Strong',    bar: 'bg-ok',      text: 'text-ok' },
+];
+
+function Requirement({ met, children }) {
+  return (
+    <li className="flex items-center gap-2">
+      <span
+        className={cn(
+          'grid h-4 w-4 shrink-0 place-items-center rounded-full border transition-colors duration-200',
+          met ? 'border-ok/40 bg-ok/15 text-ok' : 'border-line bg-raised text-transparent',
+        )}
+      >
+        <Check className="h-2.5 w-2.5" strokeWidth={3} />
+      </span>
+      <span className={cn('text-2xs transition-colors', met ? 'text-ink-muted' : 'text-ink-ghost')}>
+        {children}
+      </span>
+    </li>
+  );
+}
 
 export default function SetupPage() {
   const { initialised, loading, firstRunSetup } = useAuth();
@@ -16,12 +75,15 @@ export default function SetupPage() {
   const [confirm, setConfirm] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const score = useMemo(() => scorePassword(password), [password]);
+
   if (loading) return null;
   if (initialised) return <Navigate to="/login" replace />;
 
-  const mismatch = confirm && password !== confirm;
-  const tooShort = password && password.length < 8;
-  const canSubmit = username && password && password === confirm && !tooShort && !submitting;
+  const longEnough = password.length >= 8;
+  const matches = !!password && password === confirm;
+  const mismatch = !!confirm && password !== confirm;
+  const canSubmit = !!username && longEnough && matches && !submitting;
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -29,7 +91,7 @@ export default function SetupPage() {
     setSubmitting(true);
     try {
       await firstRunSetup({ username, password, email });
-      toast.success('Setup complete', 'Welcome to SambaControl');
+      toast.success('Setup complete', 'Your administrator account is ready.');
       nav('/', { replace: true });
     } catch (err) {
       toast.error('Setup failed', err.message);
@@ -38,78 +100,114 @@ export default function SetupPage() {
     }
   }
 
+  const strength = STRENGTH[score] || STRENGTH[0];
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-bg via-bg to-[#0c0b18]">
-      <div className="w-full max-w-lg">
-        <div className="flex items-center justify-center gap-2 mb-6">
-          <Sparkles className="w-5 h-5 text-brand-400" />
-          <h1 className="text-xl font-semibold">First-run setup</h1>
-        </div>
-        <p className="text-center text-sm text-neutral-400 mb-6">
-          Create the first admin account for your SambaControl instance.
-        </p>
+    <AuthShell
+      eyebrow="First run"
+      heading="Let's set up your server."
+      blurb="Create the administrator account that manages shares, users and permissions on this machine."
+      points={POINTS}
+      footer="AR Smart Home · arsmarthome.co.za"
+    >
+      <AuthHeading
+        title="Create administrator"
+        description="This is a one-time step. You'll sign in with these details from now on."
+      />
 
-        <form onSubmit={onSubmit} className="card space-y-4">
-          <div>
-            <label className="label">Admin username</label>
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="input"
-              autoFocus
-              required
-            />
-          </div>
-          <div>
-            <label className="label">Email (optional)</label>
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input"
-              type="email"
-              placeholder="you@example.com"
-            />
-          </div>
-          <div>
-            <label className="label">Password</label>
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              type="password"
-              className="input"
-              required
-            />
-            {tooShort && <p className="text-xs text-warning mt-1">Use at least 8 characters.</p>}
-          </div>
-          <div>
-            <label className="label">Confirm password</label>
-            <input
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              type="password"
-              className="input"
-              required
-            />
-            {mismatch && <p className="text-xs text-danger mt-1">Passwords don't match.</p>}
-          </div>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <Field
+          label="Username"
+          htmlFor="setup-username"
+          required
+          hint="Used to sign in to this control panel."
+        >
+          <Input
+            id="setup-username"
+            data-autofocus
+            autoFocus
+            mono
+            spellCheck={false}
+            autoComplete="username"
+            required
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+        </Field>
 
-          <ul className="text-xs text-neutral-500 space-y-1 pt-2">
-            <li className="flex items-center gap-2">
-              <Check className={`w-3.5 h-3.5 ${password.length >= 8 ? 'text-success' : 'text-neutral-600'}`} />
-              At least 8 characters
-            </li>
-            <li className="flex items-center gap-2">
-              <Check className={`w-3.5 h-3.5 ${password && password === confirm ? 'text-success' : 'text-neutral-600'}`} />
-              Passwords match
-            </li>
-          </ul>
+        <Field label="Email" htmlFor="setup-email" hint="Optional. Stored for your reference only.">
+          <Input
+            id="setup-email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </Field>
 
-          <button type="submit" disabled={!canSubmit} className="btn-primary w-full">
-            {submitting ? <Spinner /> : <ArrowRight className="w-4 h-4" />}
-            Create admin & continue
-          </button>
-        </form>
-      </div>
-    </div>
+        <Field label="Password" htmlFor="setup-password" required>
+          <PasswordInput
+            id="setup-password"
+            autoComplete="new-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          {password && (
+            <div className="mt-2.5 flex items-center gap-3">
+              <div className="flex flex-1 gap-1">
+                {[1, 2, 3, 4].map((i) => (
+                  <span
+                    key={i}
+                    className={cn(
+                      'h-1 flex-1 rounded-full transition-colors duration-300',
+                      i <= score ? strength.bar : 'bg-line',
+                    )}
+                  />
+                ))}
+              </div>
+              <span className={cn('w-12 text-right text-2xs font-medium', strength.text)}>
+                {strength.label}
+              </span>
+            </div>
+          )}
+        </Field>
+
+        <Field
+          label="Confirm password"
+          htmlFor="setup-confirm"
+          required
+          error={mismatch ? 'Passwords do not match.' : null}
+        >
+          <PasswordInput
+            id="setup-confirm"
+            autoComplete="new-password"
+            required
+            invalid={mismatch}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </Field>
+
+        <ul className="space-y-2 rounded-xl border border-line/70 bg-hull/50 px-4 py-3.5">
+          <Requirement met={longEnough}>At least 8 characters</Requirement>
+          <Requirement met={matches}>Both entries match</Requirement>
+        </ul>
+
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          block
+          loading={submitting}
+          icon={ArrowRight}
+          disabled={!canSubmit}
+          className="!mt-6"
+        >
+          {submitting ? 'Creating account' : 'Create account and continue'}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

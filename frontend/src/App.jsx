@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import AppLayout from '@/components/AppLayout';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { BrandMark } from '@/components/brand/Logo';
 import { Spinner } from '@/components/ui/Spinner';
 import Login from '@/pages/Login';
 import Setup from '@/pages/Setup';
@@ -11,20 +12,25 @@ import Shares from '@/pages/Shares';
 import Logs from '@/pages/Logs';
 import Settings from '@/pages/Settings';
 
+function BootScreen() {
+  return (
+    <div className="grid min-h-screen place-items-center bg-abyss px-6">
+      <div className="flex flex-col items-center gap-5">
+        <BrandMark size={52} />
+        <div className="flex items-center gap-2.5 text-sm text-ink-faint">
+          <Spinner className="h-4 w-4 text-signal-400" />
+          Connecting to AR Samba
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const { initialised, loading, user } = useAuth();
   const location = useLocation();
 
-  if (loading || initialised === null) {
-    return (
-      <div className="min-h-screen grid place-items-center bg-bg">
-        <div className="flex flex-col items-center gap-3 text-neutral-400">
-          <Spinner className="w-6 h-6 text-brand-400" />
-          <div className="text-sm">Loading SambaControl…</div>
-        </div>
-      </div>
-    );
-  }
+  if (loading || initialised === null) return <BootScreen />;
 
   // First-run: force /setup
   if (!initialised) {

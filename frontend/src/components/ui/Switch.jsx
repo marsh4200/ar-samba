@@ -1,29 +1,56 @@
 import * as RSwitch from '@radix-ui/react-switch';
 import { cn } from '@/lib/utils';
 
-export function Switch({ checked, onCheckedChange, disabled, id, label }) {
+/**
+ * Switch — label sits to the right and the whole row is the hit target.
+ * `description` renders a second line for permission toggles that need
+ * explaining without a tooltip.
+ */
+export function Switch({
+  checked, onCheckedChange, disabled, id, label, description, className, size = 'md',
+}) {
+  const dims = size === 'sm'
+    ? { root: 'h-4 w-7', thumb: 'h-3 w-3', shift: 'data-[state=checked]:translate-x-[13px]' }
+    : { root: 'h-5 w-9', thumb: 'h-4 w-4', shift: 'data-[state=checked]:translate-x-[17px]' };
+
   return (
-    <label htmlFor={id} className="flex items-center gap-2 cursor-pointer select-none">
+    <div className={cn('flex items-start gap-2.5', disabled && 'opacity-55', className)}>
       <RSwitch.Root
         id={id}
-        checked={checked}
+        checked={!!checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled}
         className={cn(
-          'w-9 h-5 rounded-full bg-white/10 transition-colors',
-          'data-[state=checked]:bg-brand',
-          'disabled:opacity-50',
+          'group relative shrink-0 rounded-full border border-line bg-abyss/80 transition-colors duration-200 ease-out',
+          'shadow-[inset_0_1px_2px_rgba(0,0,0,.5)]',
+          'data-[state=checked]:border-signal-500/60 data-[state=checked]:bg-signal-600',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-abyss',
+          'disabled:cursor-not-allowed',
+          dims.root,
+          !disabled && 'cursor-pointer',
         )}
       >
         <RSwitch.Thumb
           className={cn(
-            'block w-4 h-4 rounded-full bg-white shadow translate-x-0.5',
-            'transition-transform',
-            'data-[state=checked]:translate-x-[18px]',
+            'block translate-x-0.5 rounded-full bg-ink-muted shadow-sm transition-transform duration-200 ease-out',
+            'data-[state=checked]:bg-white',
+            dims.thumb,
+            dims.shift,
           )}
         />
       </RSwitch.Root>
-      {label && <span className="text-sm text-neutral-300">{label}</span>}
-    </label>
+
+      {label && (
+        <label
+          htmlFor={id}
+          className={cn('min-w-0 select-none leading-tight', !disabled && 'cursor-pointer')}
+        >
+          <span className="block text-xs font-medium text-ink">{label}</span>
+          {description && (
+            <span className="mt-0.5 block text-2xs text-ink-faint">{description}</span>
+          )}
+        </label>
+      )}
+    </div>
   );
 }

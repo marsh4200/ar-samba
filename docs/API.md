@@ -125,7 +125,36 @@ files inherit it.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET`  | `/api/system/dashboard` | Aggregated counts, service status, disk usage, recent activity |
+| `GET`  | `/api/system/metrics` | Live host telemetry — CPU, memory, load, uptime |
 | `POST` | `/api/system/samba/reload` | Reload `smbd` |
+
+### `GET /api/system/metrics`
+
+Added in v2.0. Read-only and cheap enough to poll every few seconds; the
+dashboard gauges refresh on a 5-second interval. Requires authentication.
+
+```json
+{
+  "hostname": "ar-nas-01",
+  "kernel": "6.8.0-51-generic",
+  "cpu_percent": 24.1,
+  "cpu_cores": 4,
+  "cpu_threads": 8,
+  "load_1": 0.62,
+  "load_5": 0.71,
+  "load_15": 0.55,
+  "memory_total": 16637243392,
+  "memory_used": 10204741632,
+  "memory_percent": 61.3,
+  "swap_total": 2147483648,
+  "swap_used": 0,
+  "swap_percent": 0.0,
+  "uptime_seconds": 1049400
+}
+```
+
+`cpu_percent` is sampled non-blocking, so it reports usage since the previous
+call rather than stalling the request.
 
 ---
 

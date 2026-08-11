@@ -1,98 +1,73 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import {
-  LayoutDashboard, Users, FolderTree, ScrollText,
-  Settings, LogOut, ShieldCheck, Server,
-} from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
+import { useEffect, useState } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
+import { Sidebar, MobileSidebar } from '@/components/layout/Sidebar';
+import { Topbar } from '@/components/layout/Topbar';
+import { SystemProvider } from '@/context/SystemContext';
 import { cn } from '@/lib/utils';
 
-const NAV = [
-  { to: '/',         label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/users',    label: 'Users',     icon: Users },
-  { to: '/shares',   label: 'Shares',    icon: FolderTree },
-  { to: '/logs',     label: 'Activity',  icon: ScrollText },
-  { to: '/settings', label: 'Settings',  icon: Settings },
-];
+const COLLAPSE_KEY = 'arsamba.nav.collapsed';
 
+/**
+ * AppLayout — fixed rail + sticky topbar + scrolling content column.
+ *
+ * The rail collapse preference is remembered because on a laptop at a client
+ * site the extra 190px of table width matters, and re-collapsing on every
+ * visit would be tedious.
+ */
 export default function AppLayout() {
-  const { user, logout } = useAuth();
-  const nav = useNavigate();
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; }
+  });
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch { /* private mode */ }
+  }, [collapsed]);
+
+  // Close the drawer on navigation and lock body scroll while it's open.
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileOpen]);
+
+  // Escape closes the drawer
+  useEffect(() => {
+    if (!mobileOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setMobileOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileOpen]);
 
   return (
-    <div className="min-h-screen flex bg-bg">
-      {/* Sidebar */}
-      <aside className="hidden md:flex md:w-64 flex-col bg-bg-soft border-r border-white/5">
-        <div className="px-5 py-5 flex items-center gap-3 border-b border-white/5">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-glass">
-            <Server className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <div className="font-semibold leading-tight">SambaControl</div>
-            <div className="text-[10px] uppercase tracking-wider text-neutral-500">ar-samba</div>
-          </div>
-        </div>
+    <SystemProvider>
+      <div className="min-h-screen">
+        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+        <MobileSidebar open={mobileOpen} onClose={() => setMobileOpen(false)} />
 
-        <nav className="flex-1 px-3 py-4 space-y-1">
-          {NAV.map((n) => {
-            const Icon = n.icon;
-            return (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                end={n.end}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
-                    isActive
-                      ? 'bg-brand/15 text-brand-400 border border-brand/20'
-                      : 'text-neutral-400 hover:text-neutral-100 hover:bg-white/5 border border-transparent',
-                  )
-                }
-              >
-                <Icon className="w-4 h-4" />
-                {n.label}
-              </NavLink>
-            );
-          })}
-        </nav>
+        <div
+          className={cn(
+            'flex min-h-screen flex-col transition-[padding] duration-300 ease-out',
+            collapsed ? 'lg:pl-[76px]' : 'lg:pl-[264px]',
+          )}
+        >
+          <Topbar onOpenNav={() => setMobileOpen(true)} />
 
-        <div className="px-3 py-3 border-t border-white/5 text-xs text-neutral-500 flex items-center gap-2">
-          <ShieldCheck className="w-3.5 h-3.5 text-success" />
-          <span>Secure session</span>
-        </div>
-      </aside>
-
-      {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 border-b border-white/5 bg-bg-soft/60 backdrop-blur-md flex items-center justify-between px-4 md:px-6 sticky top-0 z-30">
-          <div className="md:hidden font-semibold flex items-center gap-2">
-            <Server className="w-4 h-4 text-brand-400" />
-            SambaControl
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <div className="text-sm leading-tight">{user?.username}</div>
-              <div className="text-[10px] uppercase tracking-wider text-neutral-500">{user?.role}</div>
+          <main className="flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+            <div className="mx-auto w-full max-w-[1440px]">
+              <Outlet />
             </div>
-            <button
-              onClick={() => { logout(); nav('/login', { replace: true }); }}
-              className="btn-ghost"
-              title="Log out"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
-          </div>
-        </header>
+          </main>
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1400px] w-full mx-auto">
-          <Outlet />
-        </main>
-
-        <footer className="px-6 py-3 text-[11px] text-neutral-600 text-center border-t border-white/5">
-          SambaControl · marsh4200/ar-samba
-        </footer>
+          <footer className="border-t border-line/60 px-4 py-4 sm:px-6 lg:px-8">
+            <div className="mx-auto flex max-w-[1440px] flex-col items-center justify-between gap-2 text-2xs text-ink-ghost sm:flex-row">
+              <span>AR Samba — Samba share &amp; ACL management</span>
+              <span className="font-mono">marsh4200/ar-samba</span>
+            </div>
+          </footer>
+        </div>
       </div>
-    </div>
+    </SystemProvider>
   );
 }

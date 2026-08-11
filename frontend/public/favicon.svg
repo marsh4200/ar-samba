@@ -1,12 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#818cf8"/>
-      <stop offset="1" stop-color="#4f46e5"/>
+    <linearGradient id="tile" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1E293B"/>
+      <stop offset="1" stop-color="#070A12"/>
+    </linearGradient>
+    <linearGradient id="bay" x1="10" y1="0" x2="38" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#0284C7"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38BDF8" stop-opacity=".8"/>
+      <stop offset=".5" stop-color="#38BDF8" stop-opacity=".15"/>
+      <stop offset="1" stop-color="#6366F1" stop-opacity=".5"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="#0a0a0f"/>
-  <path d="M14 22h28a8 8 0 0 1 8 8v14a8 8 0 0 1-8 8H14z" fill="url(#g)" opacity=".95"/>
-  <path d="M14 16h22a8 8 0 0 1 8 8v0H14z" fill="#818cf8"/>
-  <circle cx="42" cy="40" r="3" fill="#0a0a0f"/>
+  <rect x="1" y="1" width="46" height="46" rx="13" fill="url(#tile)"/>
+  <rect x="1" y="1" width="46" height="46" rx="13" fill="none" stroke="url(#edge)" stroke-width="1.5"/>
+  <rect x="11" y="12"   width="26" height="7" rx="3.5" fill="url(#bay)"/>
+  <rect x="11" y="21.5" width="26" height="7" rx="3.5" fill="url(#bay)" opacity=".55"/>
+  <rect x="11" y="31"   width="26" height="7" rx="3.5" fill="url(#bay)" opacity=".28"/>
+  <circle cx="32.5" cy="15.5" r="1.6" fill="#7DD3FC"/>
+  <circle cx="32.5" cy="25"   r="1.6" fill="#070A12" opacity=".7"/>
+  <circle cx="32.5" cy="34.5" r="1.6" fill="#070A12" opacity=".5"/>
 </svg>

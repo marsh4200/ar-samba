@@ -1,56 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  Users, FolderTree, Server, HardDrive, Activity, RefreshCw, CircleDot,
+  Users, FolderTree, HardDrive, Activity, RefreshCw, Server, Cpu,
+  MemoryStick, ArrowUpRight, Gauge as GaugeIcon, Clock, CircleSlash,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
-import { bytesToHuman, relativeTime } from '@/lib/utils';
-import { Spinner } from '@/components/ui/Spinner';
-import { Progress } from '@/components/ui/Progress';
-
-function StatCard({ icon: Icon, label, value, hint, tone }) {
-  return (
-    <div className="card">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-xs uppercase tracking-wider text-neutral-500">{label}</div>
-          <div className="mt-2 text-2xl font-semibold">{value}</div>
-          {hint && <div className="text-xs text-neutral-500 mt-1">{hint}</div>}
-        </div>
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center
-                         ${tone === 'success' ? 'bg-success/15 text-success' :
-                           tone === 'danger'  ? 'bg-danger/15 text-danger'  :
-                                                'bg-brand/15 text-brand-400'}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-      </div>
-    </div>
-  );
-}
+import { useSystem } from '@/context/SystemContext';
+import { bytesToHuman, formatUptime, relativeTime } from '@/lib/utils';
+import { categoryMeta, humaniseAction } from '@/lib/activity';
+import { Card, CardHeader, CardBody } from '@/components/ui/Card';
+import { StatCard } from '@/components/ui/StatCard';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Gauge } from '@/components/ui/Gauge';
+import { Badge, StatusDot } from '@/components/ui/Badge';
+import { Button, buttonVariants } from '@/components/ui/Button';
+import { Progress, toneForPercent } from '@/components/ui/Progress';
+import { EmptyState } from '@/components/ui/Table';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 export default function DashboardPage() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { dashboard: data, metrics, metricsSupported, loading, refresh } = useSystem();
   const [reloading, setReloading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const toast = useToast();
-
-  async function load() {
-    try {
-      const d = await api.get('/system/dashboard');
-      setData(d);
-    } catch (e) {
-      toast.error('Could not load dashboard', e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function reloadSamba() {
     setReloading(true);
     try {
       await api.post('/system/samba/reload');
-      toast.success('Samba reloaded');
-      load();
+      toast.success('Samba reloaded', 'Configuration re-applied to the running service.');
+      await refresh();
     } catch (e) {
       toast.error('Reload failed', e.message);
     } finally {
@@ -58,140 +38,360 @@ export default function DashboardPage() {
     }
   }
 
-  useEffect(() => {
-    load();
-    const id = setInterval(load, 15000);
-    return () => clearInterval(id);
-  }, []);
+  async function manualRefresh() {
+    setRefreshing(true);
+    try {
+      await refresh();
+    } catch (e) {
+      toast.error('Could not refresh', e.message);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
-  if (loading || !data) {
+  if (loading && !data) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Spinner className="w-6 h-6" />
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-56" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-32" />)}
+        </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Skeleton className="h-64 lg:col-span-2" />
+          <Skeleton className="h-64" />
+        </div>
       </div>
     );
   }
 
+  if (!data) {
+    return (
+      <Card>
+        <EmptyState
+          icon={CircleSlash}
+          title="Can't reach the server"
+          description="The dashboard could not load system status. Check that the AR Samba backend service is running."
+          action={<Button variant="primary" icon={RefreshCw} onClick={manualRefresh} loading={refreshing}>Try again</Button>}
+        />
+      </Card>
+    );
+  }
+
   const smbd = data.services.find((s) => s.name === 'smbd');
-  const smbActive = smbd?.active;
+  const smbActive = !!smbd?.active;
+  const storage = data.storage[0];
+  const storagePct = storage ? storage.percent : 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="text-sm text-neutral-500 mt-1">
-            SambaControl v{data.version}
-          </p>
-        </div>
-        <button onClick={reloadSamba} disabled={reloading} className="btn-outline">
-          {reloading ? <Spinner /> : <RefreshCw className="w-4 h-4" />}
-          Reload Samba
-        </button>
-      </div>
+    <div className="space-y-6 stagger">
+      <PageHeader
+        title="Dashboard"
+        description={
+          metrics?.hostname
+            ? `Live status for ${metrics.hostname}.`
+            : 'Live status for this file server.'
+        }
+        actions={
+          <>
+            <Button icon={RefreshCw} onClick={manualRefresh} loading={refreshing} variant="outline">
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
+            <Button icon={Server} onClick={reloadSamba} loading={reloading} variant="secondary">
+              Reload Samba
+            </Button>
+          </>
+        }
+      />
 
-      {/* Stat row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Users} label="Users" value={data.user_count} hint="Samba accounts" />
-        <StatCard icon={FolderTree} label="Shares" value={data.share_count} hint="Active shares" />
+      {/* ── Status row ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={Server}
-          label="Samba"
-          value={smbActive ? 'Online' : 'Offline'}
-          hint={smbd?.state ?? 'unknown'}
-          tone={smbActive ? 'success' : 'danger'}
+          label="Samba service"
+          value={smbActive ? 'Running' : 'Stopped'}
+          tone={smbActive ? 'ok' : 'crit'}
+          hint={smbd?.state || 'state unknown'}
+          trailing={
+            <div className="flex items-center gap-2">
+              <StatusDot tone={smbActive ? 'ok' : 'crit'} pulse={smbActive} />
+              <span className="text-2xs text-ink-faint">
+                {metrics ? `Up ${formatUptime(metrics.uptime_seconds)}` : `Version ${data.version}`}
+              </span>
+            </div>
+          }
         />
+
+        <StatCard
+          icon={FolderTree}
+          label="Shares"
+          value={data.share_count}
+          tone="signal"
+          hint={data.share_count === 1 ? '1 share published' : `${data.share_count} shares published`}
+          trailing={
+            <Link
+              to="/shares"
+              className="inline-flex items-center gap-1 text-2xs font-medium text-signal-400 transition-colors hover:text-signal-300"
+            >
+              Manage shares <ArrowUpRight className="h-3 w-3" />
+            </Link>
+          }
+        />
+
+        <StatCard
+          icon={Users}
+          label="Samba users"
+          value={data.user_count}
+          tone="info"
+          hint="Samba-only, no shell access"
+          trailing={
+            <Link
+              to="/users"
+              className="inline-flex items-center gap-1 text-2xs font-medium text-signal-400 transition-colors hover:text-signal-300"
+            >
+              Manage users <ArrowUpRight className="h-3 w-3" />
+            </Link>
+          }
+        />
+
         <StatCard
           icon={HardDrive}
-          label="Storage"
-          value={data.storage[0] ? `${data.storage[0].percent.toFixed(0)}%` : '—'}
-          hint={data.storage[0] ? `${bytesToHuman(data.storage[0].used_bytes)} of ${bytesToHuman(data.storage[0].total_bytes)}` : ''}
+          label="Storage used"
+          value={storage ? `${storagePct.toFixed(0)}%` : '—'}
+          tone={storagePct >= 90 ? 'crit' : storagePct >= 75 ? 'warn' : 'ok'}
+          hint={
+            storage
+              ? `${bytesToHuman(storage.used_bytes)} of ${bytesToHuman(storage.total_bytes)}`
+              : 'No volume reported'
+          }
+          trailing={storage && <Progress value={storagePct} tone={toneForPercent(storagePct)} size="xs" animated={false} />}
         />
       </div>
 
-      {/* Two-col layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Services */}
-        <div className="card lg:col-span-1">
-          <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
-            <Server className="w-4 h-4 text-brand-400" /> Services
-          </h2>
-          <ul className="space-y-3">
-            {data.services.map((s) => (
-              <li key={s.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CircleDot className={`w-3.5 h-3.5 ${s.active ? 'text-success' : 'text-danger'}`} />
-                  <span className="font-mono text-sm">{s.name}</span>
+      {/* ── Detail: main column + stacked side column ──────────────── */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          <Card>
+          <CardHeader
+            icon={GaugeIcon}
+            title="Resources"
+            description={
+              metricsSupported
+                ? 'Host utilisation, sampled every five seconds.'
+                : 'Disk capacity for the shares volume.'
+            }
+            action={
+              metrics && (
+                <div className="hidden items-center gap-2 rounded-lg border border-line bg-hull/60 px-2.5 py-1.5 sm:flex">
+                  <Clock className="h-3.5 w-3.5 text-ink-ghost" />
+                  <span className="font-mono text-2xs text-ink-muted">
+                    load {metrics.load_1.toFixed(2)}
+                  </span>
                 </div>
-                <span className={s.active ? 'badge-success' : 'badge-danger'}>{s.state}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Storage */}
-        <div className="card lg:col-span-2">
-          <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
-            <HardDrive className="w-4 h-4 text-brand-400" /> Storage
-          </h2>
-          {data.storage.map((s) => (
-            <div key={s.path} className="space-y-2 mb-4 last:mb-0">
-              <div className="flex justify-between text-sm">
-                <span className="font-mono text-neutral-400 truncate">{s.path}</span>
-                <span className="text-neutral-300">
-                  {bytesToHuman(s.used_bytes)} / {bytesToHuman(s.total_bytes)}
-                </span>
-              </div>
-              <Progress value={s.percent} animated={false} />
-              <div className="text-xs text-neutral-500">
-                {bytesToHuman(s.free_bytes)} free
-              </div>
+              )
+            }
+          />
+          <CardBody>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+              {metricsSupported && (
+                <>
+                  <Gauge
+                    value={metrics?.cpu_percent ?? 0}
+                    label="CPU"
+                    sublabel={metrics ? `${metrics.cpu_threads} threads` : ''}
+                    tone={toneForPercent(metrics?.cpu_percent ?? 0)}
+                    loading={!metrics}
+                  />
+                  <Gauge
+                    value={metrics?.memory_percent ?? 0}
+                    label="Memory"
+                    sublabel={metrics ? bytesToHuman(metrics.memory_total) : ''}
+                    tone={toneForPercent(metrics?.memory_percent ?? 0)}
+                    loading={!metrics}
+                  />
+                </>
+              )}
+              <Gauge
+                value={storagePct}
+                label="Storage"
+                sublabel={storage ? bytesToHuman(storage.free_bytes) + ' free' : ''}
+                tone={toneForPercent(storagePct)}
+              />
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Recent activity */}
-      <div className="card">
-        <h2 className="text-sm font-semibold mb-4 flex items-center gap-2">
-          <Activity className="w-4 h-4 text-brand-400" /> Recent activity
-        </h2>
-        {data.recent_activity.length === 0 ? (
-          <p className="text-sm text-neutral-500">No activity yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wider text-neutral-500">
-                  <th className="px-2 py-2">When</th>
-                  <th className="px-2 py-2">Actor</th>
-                  <th className="px-2 py-2">Category</th>
-                  <th className="px-2 py-2">Action</th>
-                  <th className="px-2 py-2">Target</th>
-                  <th className="px-2 py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.recent_activity.map((a) => (
-                  <tr key={a.id} className="table-row">
-                    <td className="px-2 py-2 text-neutral-400 whitespace-nowrap">{relativeTime(a.ts)}</td>
-                    <td className="px-2 py-2 font-medium">{a.actor}</td>
-                    <td className="px-2 py-2">
-                      <span className="badge-muted">{a.category}</span>
-                    </td>
-                    <td className="px-2 py-2">{a.action}</td>
-                    <td className="px-2 py-2 text-neutral-400 font-mono text-xs">{a.target || '—'}</td>
-                    <td className="px-2 py-2">
-                      <span className={a.status === 'ok' ? 'badge-success' : 'badge-danger'}>
-                        {a.status}
-                      </span>
-                    </td>
-                  </tr>
+            {/* Host facts strip */}
+            {metrics ? (
+              <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line/70 bg-line/70 sm:grid-cols-4">
+                {[
+                  { icon: Server,       label: 'Host',   value: metrics.hostname },
+                  { icon: Cpu,          label: 'Cores',  value: `${metrics.cpu_cores} / ${metrics.cpu_threads}` },
+                  { icon: MemoryStick,  label: 'Memory', value: `${bytesToHuman(metrics.memory_used)} used` },
+                  { icon: Clock,        label: 'Uptime', value: formatUptime(metrics.uptime_seconds) },
+                ].map((f) => (
+                  <div key={f.label} className="bg-panel px-4 py-3">
+                    <div className="flex items-center gap-1.5 eyebrow">
+                      <f.icon className="h-3 w-3" /> {f.label}
+                    </div>
+                    <div className="mt-1.5 truncate font-mono text-xs text-ink" title={String(f.value)}>
+                      {f.value}
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              </div>
+            ) : (
+              !metricsSupported && (
+                <p className="mt-6 rounded-xl border border-line/70 bg-hull/50 px-4 py-3 text-2xs leading-relaxed text-ink-faint">
+                  CPU and memory readings need a newer backend. Update AR Samba from
+                  Settings to enable them.
+                </p>
+              )
+            )}
+          </CardBody>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader
+            icon={Activity}
+            title="Recent activity"
+            description="The last ten privileged actions on this server."
+            action={
+              <Link
+                to="/logs"
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+              >
+                View all <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            }
+          />
+          <CardBody flush>
+            {data.recent_activity.length === 0 ? (
+              <EmptyState
+                icon={Activity}
+                title="Nothing has happened yet"
+                description="Create a share or add a user and it will show up here."
+                action={
+                  <Link to="/shares" className={buttonVariants({ variant: 'primary', size: 'sm' })}>
+                    <FolderTree className="h-4 w-4" />
+                    Create a share
+                  </Link>
+                }
+              />
+            ) : (
+              <ul className="divide-y divide-line/50">
+                {data.recent_activity.map((a) => {
+                  const meta = categoryMeta(a.category);
+                  const Icon = meta.icon;
+                  const failed = a.status !== 'ok';
+                  return (
+                    <li key={a.id} className="flex items-start gap-3.5 px-5 py-3.5 transition-colors hover:bg-signal-500/[.03]">
+                      <span
+                        className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${
+                          failed
+                            ? 'border-crit/30 bg-crit/10 text-crit'
+                            : 'border-line bg-raised text-ink-muted'
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="text-xs font-medium text-ink">
+                            {humaniseAction(a.action)}
+                          </span>
+                          {a.target && (
+                            <span className="truncate font-mono text-2xs text-ink-faint">
+                              {a.target}
+                            </span>
+                          )}
+                          {failed && <Badge tone="crit">failed</Badge>}
+                        </div>
+                        <div className="mt-1 text-2xs text-ink-ghost">
+                          {a.actor} · {relativeTime(a.ts)}
+                        </div>
+                      </div>
+
+                      <Badge tone={meta.tone} className="mt-0.5 hidden sm:inline-flex">
+                        {meta.label}
+                      </Badge>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+        </div>
+
+        {/* Side column */}
+        <div className="space-y-4">
+          {/* Services */}
+          <Card>
+          <CardHeader icon={Server} title="Services" description="Samba daemons on this host." />
+          <CardBody className="p-3">
+            <ul className="space-y-1">
+              {data.services.map((s) => (
+                <li
+                  key={s.name}
+                  className="flex items-center justify-between gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-raised"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <StatusDot tone={s.active ? 'ok' : 'crit'} pulse={s.active} />
+                    <div className="min-w-0">
+                      <div className="font-mono text-xs font-medium text-ink">{s.name}</div>
+                      <div className="mt-0.5 truncate text-2xs text-ink-faint">
+                        {s.pid ? `pid ${s.pid}` : 'not running'}
+                      </div>
+                    </div>
+                  </div>
+                  <Badge tone={s.active ? 'ok' : 'crit'}>{s.state}</Badge>
+                </li>
+              ))}
+            </ul>
+          </CardBody>
+        </Card>
+
+        {/* Volumes */}
+        <Card>
+          <CardHeader
+            icon={HardDrive}
+            title="Volumes"
+            description="Disk backing the shares directory."
+          />
+          <CardBody>
+            {data.storage.length === 0 ? (
+              <p className="py-6 text-center text-2xs text-ink-faint">
+                No volume reported for the shares directory.
+              </p>
+            ) : (
+              <div className="space-y-5">
+                {data.storage.map((s) => {
+                  const tone = toneForPercent(s.percent);
+                  return (
+                    <div key={s.path}>
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <span className="truncate font-mono text-2xs text-ink-muted" title={s.path}>
+                          {s.path}
+                        </span>
+                        <Badge tone={tone === 'signal' ? 'ok' : tone}>
+                          {s.percent.toFixed(0)}%
+                        </Badge>
+                      </div>
+                      <Progress value={s.percent} tone={tone} animated={false} />
+                      <div className="mt-2.5 flex items-center justify-between text-2xs text-ink-faint">
+                        <span>{bytesToHuman(s.used_bytes)} used</span>
+                        <span>{bytesToHuman(s.free_bytes)} free</span>
+                      </div>
+                      <div className="mt-3 border-t border-line/60 pt-3 text-2xs text-ink-ghost">
+                        Capacity {bytesToHuman(s.total_bytes)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardBody>
+          </Card>
+        </div>
       </div>
     </div>
   );

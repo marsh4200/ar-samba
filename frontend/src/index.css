@@ -2,60 +2,151 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ══════════════════════════════════════════════════════════════════════
+   AR Samba — design system
+   Layered navy surfaces, cyan signal ramp, appliance-panel edge lighting.
+   ══════════════════════════════════════════════════════════════════════ */
+
 @layer base {
   html, body, #root { height: 100%; }
-  body { font-feature-settings: "cv02","cv03","cv04","cv11"; }
 
-  /* Scrollbar */
+  html { -webkit-tap-highlight-color: transparent; }
+
+  body {
+    @apply bg-abyss text-ink antialiased;
+    font-feature-settings: "cv02","cv03","cv04","cv11","ss01";
+    /* Ambient depth: two soft signal washes anchored top-left / mid-right */
+    background-image:
+      radial-gradient(900px 600px at 12% -8%,  rgba(14,165,233,.10), transparent 60%),
+      radial-gradient(760px 520px at 92% 18%,  rgba(99,102,241,.07), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3 { @apply font-display tracking-tight; }
+
+  /* Focus: one consistent ring everywhere */
+  :focus-visible {
+    @apply outline-none ring-2 ring-signal-400/70 ring-offset-2 ring-offset-abyss;
+  }
+
+  ::selection { background: rgba(14,165,233,.32); color: #fff; }
+
+  /* Scrollbars */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #2a2d40; border-radius: 8px; }
-  ::-webkit-scrollbar-thumb:hover { background: #3a3e58; }
+  ::-webkit-scrollbar-thumb {
+    background: #22304a; border-radius: 999px;
+    border: 2px solid transparent; background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #33456b; background-clip: content-box; }
+  * { scrollbar-width: thin; scrollbar-color: #22304a transparent; }
+
+  /* Kill number-input spinners — we use explicit controls */
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; }
+
+  /* Native select popup needs a dark surface or it renders white-on-white */
+  select option { background: #111726; color: #E8EDF5; }
 }
 
 @layer components {
-  .glass {
-    @apply bg-bg-card/70 backdrop-blur-md border border-white/5 shadow-glass;
-  }
-  .card {
-    @apply rounded-xl glass p-5;
-  }
-  .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2
-           text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none
-           focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60;
-  }
-  .btn-primary  { @apply btn bg-brand text-white hover:bg-brand-600; }
-  .btn-ghost    { @apply btn text-neutral-300 hover:bg-white/5; }
-  .btn-danger   { @apply btn bg-danger/90 text-white hover:bg-danger; }
-  .btn-outline  { @apply btn border border-white/10 hover:bg-white/5; }
+  /* ── Surface primitives ──────────────────────────────────────────── */
 
-  .input {
-    @apply w-full rounded-lg bg-bg-soft border border-white/10 px-3 py-2 text-sm
-           placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand/60;
+  /* The signature: a hairline top-edge highlight, like light catching the
+     bevel of a rack-mounted appliance. Applied to every raised surface. */
+  .bevel { @apply relative shadow-inset; }
+
+  .surface {
+    @apply relative rounded-2xl border border-line/80 bg-panel shadow-panel shadow-inset;
   }
-  .label { @apply block text-xs font-medium text-neutral-400 mb-1.5; }
+  .surface-raised { @apply surface bg-raised; }
 
-  .badge { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
-  .badge-success { @apply badge bg-success/15 text-success; }
-  .badge-danger  { @apply badge bg-danger/15 text-danger; }
-  .badge-muted   { @apply badge bg-white/5 text-neutral-400; }
+  .well {
+    @apply rounded-xl border border-line/70 bg-abyss/60;
+  }
 
-  .table-row { @apply border-b border-white/5 hover:bg-white/[0.02] transition-colors; }
+  /* Interactive surface — used by clickable cards / nav tiles */
+  .surface-hover {
+    @apply transition-colors duration-200 ease-out hover:border-line hover:bg-raised;
+  }
+
+  /* ── Eyebrow / label typography ──────────────────────────────────── */
+  .eyebrow {
+    @apply text-2xs font-semibold uppercase tracking-[.14em] text-ink-faint;
+  }
+  .field-label {
+    @apply mb-1.5 block text-xs font-medium text-ink-muted;
+  }
+  .hint { @apply mt-1.5 text-2xs leading-relaxed text-ink-faint; }
+
+  /* ── Form controls ───────────────────────────────────────────────── */
+  .control {
+    @apply w-full rounded-xl border border-line bg-abyss/70 px-3.5 py-2.5 text-sm text-ink
+           transition-all duration-200 ease-out
+           placeholder:text-ink-ghost
+           hover:border-line
+           focus:border-signal-500/70 focus:bg-abyss focus:outline-none
+           focus:ring-2 focus:ring-signal-500/25 focus:ring-offset-0
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .control-invalid {
+    @apply border-crit/60 focus:border-crit/70 focus:ring-crit/20;
+  }
+
+  /* ── Data table ──────────────────────────────────────────────────── */
+  .data-head {
+    @apply eyebrow border-b border-line/80 bg-hull/60 px-4 py-3 text-left font-semibold;
+  }
+  .data-row {
+    @apply border-b border-line/50 transition-colors duration-150 last:border-0
+           hover:bg-signal-500/[.045];
+  }
+  .data-cell { @apply px-4 py-3.5 align-middle text-sm; }
+
+  /* ── Misc ────────────────────────────────────────────────────────── */
+  .divider { @apply h-px w-full bg-gradient-to-r from-transparent via-line to-transparent; }
+
+  .kbd {
+    @apply rounded-md border border-line bg-raised px-1.5 py-0.5 font-mono text-2xs text-ink-muted;
+  }
+
+  /* Inline code inside prose copy */
+  .code-chip {
+    @apply rounded-md border border-line/80 bg-abyss/70 px-1.5 py-0.5 font-mono text-2xs text-signal-300;
+  }
 }
 
-/* Progress bar shimmer */
-.shimmer {
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255,255,255,0.15) 50%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.6s linear infinite;
+@layer utilities {
+  /* Shimmer used by progress bars + skeletons */
+  .shimmer {
+    background-image: linear-gradient(
+      90deg, transparent 0%, rgba(255,255,255,.14) 50%, transparent 100%);
+    background-size: 200% 100%;
+    @apply animate-sweep;
+  }
+
+  /* Staggered page-mount reveal. Applied to direct children of .stagger */
+  .stagger > * { @apply animate-rise-in; }
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 45ms; }
+  .stagger > *:nth-child(3) { animation-delay: 90ms; }
+  .stagger > *:nth-child(4) { animation-delay: 135ms; }
+  .stagger > *:nth-child(5) { animation-delay: 180ms; }
+  .stagger > *:nth-child(6) { animation-delay: 225ms; }
+
+  .text-balance { text-wrap: balance; }
+
+  /* Tabular figures for metrics so digits don't jitter as values tick */
+  .tnum { font-variant-numeric: tabular-nums; }
 }
-@keyframes shimmer {
-  0% { background-position: -100% 0; }
-  100% { background-position: 200% 0; }
+
+/* ── Reduced motion: honour the OS setting ─────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

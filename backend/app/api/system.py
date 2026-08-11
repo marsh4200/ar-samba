@@ -15,7 +15,7 @@ from app.core.database import get_db
 from app.models.activity import ActivityLog
 from app.models.share import Share, ShareAccess
 from app.models.user import SambaUser
-from app.schemas.system import ActivityOut, DashboardOut, ServiceStatus, StorageInfo
+from app.schemas.system import ActivityOut, DashboardOut, HostMetrics, ServiceStatus, StorageInfo
 from app.services import samba as samba_svc
 from app.services import system as sys_svc
 from app.services.activity import log_activity
@@ -66,6 +66,15 @@ def dashboard(db: Annotated[Session, Depends(get_db)], _u: CurrentUser) -> Dashb
         recent_activity=recent_out,
         version=__version__,
     )
+
+
+@router.get("/metrics", response_model=HostMetrics)
+def metrics(_u: CurrentUser) -> HostMetrics:
+    """Live CPU, memory, load and uptime for the dashboard.
+
+    Read-only and cheap enough to poll every few seconds.
+    """
+    return HostMetrics(**sys_svc.host_metrics())
 
 
 @router.post("/samba/reload", status_code=204)
