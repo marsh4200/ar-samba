@@ -1,4 +1,4 @@
-# SambaControl (ar-samba)
+# AR Samba (ar-samba)
 
 > Production-ready, self-hosted **Samba + ACL** management platform for Ubuntu Server.
 > Manage shares, users, permissions, and `smb.conf` from a modern dark web GUI instead of editing configs by hand.
@@ -20,9 +20,25 @@
 - 🔁 **Built-in updater** — pulls from GitHub, backs up, rolls back on failure
 - 🐳 **Docker + systemd** — deploy either way
 - 🚀 **One-line installer** for fresh Ubuntu 24.04 servers
-- 🌙 **Dark mode** modern UI with shadcn/ui + Tailwind
+- 🌙 **Redesigned v2.0 interface** — collapsible sidebar, live CPU/RAM/storage
+  gauges, searchable tables, and a responsive layout that works on a phone
+- 📈 **Live host telemetry** — CPU, memory, load and uptime via `/api/system/metrics`
 - 🔑 **JWT auth** with first-run setup wizard and role-based access
 - 📝 **Full activity logging** of every privileged action
+
+---
+
+## 📸 Screenshots
+
+| Dashboard | Shares |
+|---|---|
+| ![Dashboard](screenshots/v2/desktop-dashboard.png) | ![Shares](screenshots/v2/desktop-shares.png) |
+
+| Permissions editor | Activity log |
+|---|---|
+| ![ACL editor](screenshots/v2/desktop-modal-acl.png) | ![Activity](screenshots/v2/desktop-activity.png) |
+
+More, including tablet and mobile layouts, in [`screenshots/v2/`](screenshots/v2).
 
 ---
 

@@ -1,5 +1,51 @@
 # Changelog
 
+## v2.0.0 — 2026-08-11
+
+A full redesign of the web interface. **No existing API, backend behaviour or
+feature was changed or removed** — every endpoint keeps its original contract.
+
+**New design system**
+
+- Layered deep-navy surfaces (`#070A12` / `#0B0F1A` / `#111726`) with a
+  cyan-to-azure signal ramp, replacing the previous flat indigo-on-black theme
+- Type pairing: Space Grotesk (wordmark, headings, metrics), Inter (UI),
+  JetBrains Mono (paths, usernames, log actions)
+- New AR Samba brand mark and wordmark; matching favicon and boot splash
+- Reusable primitives: `Button`, `Card`, `Badge`, `Field`, `Table`, `Dialog`,
+  `Switch`, `Progress`, `Gauge`, `StatCard`, `Segmented`, `DropdownMenu`,
+  `Skeleton`, `PageHeader`, `EmptyState`
+- Reduced-motion support and a consistent keyboard focus ring throughout
+
+**Layout**
+
+- Collapsible sidebar with grouped navigation; the collapse preference persists
+- Live CPU/RAM rail and Samba status pinned to the bottom of the sidebar
+- Off-canvas mobile drawer with scroll lock and Escape-to-close
+- Sticky topbar with storage readout, service status and an account menu
+- Fully responsive from 390px through desktop
+
+**Screens**
+
+- **Dashboard** — segmented arc gauges for CPU, memory and storage; status
+  cards; services panel; volume capacity; recent-activity feed
+- **Shares** — searchable table, access badges, row action menus, and a
+  rebuilt permissions editor with Read only / Add files / Full control presets
+- **Users** — avatars, status filter with counts, inline enable/disable
+- **Activity** — category filters, failure banner, expandable error details,
+  live mode, and "Load older" using the API's existing `limit`/`offset`
+- **Settings** — sectioned layout with a sticky page index; stepper controls
+  for the timeout settings; redesigned updater with a step preview
+- **Login / first-run setup** — split-screen layout with password strength
+
+**Added**
+
+- `GET /api/system/metrics` — live CPU, memory, load and uptime via the
+  already-vendored `psutil`. Purely additive; the frontend degrades gracefully
+  when talking to an older backend that doesn't expose it.
+- Tests covering the new endpoint and asserting the dashboard payload contract
+  is unchanged
+
 ## v0.3.0 — 2026-05-20
 
 **Compatibility**

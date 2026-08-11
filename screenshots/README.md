@@ -1,12 +1,22 @@
 # Screenshots
 
-Drop UI screenshots in this folder and reference them in the main README.
+The current set lives in [`v2/`](./v2) and was captured from the v2.0 interface
+against a mock API, at three widths:
 
-Suggested set:
+| Prefix | Viewport |
+|--------|----------|
+| `desktop-` | 1440 × 950 |
+| `tablet-`  | 900 × 1200 |
+| `mobile-`  | 390 × 844 |
 
-- `dashboard.png` — main dashboard
-- `users.png` — Samba user management table
-- `shares.png` — share list
-- `acl-editor.png` — permission toggles modal
-- `updater.png` — in-progress updater modal
-- `logs.png` — activity log
+**Pages** — `dashboard`, `shares`, `users`, `activity`, `settings`, `login`
+
+**Modals** — `desktop-modal-newshare`, `desktop-modal-acl`, `desktop-modal-updater`
+
+**Other** — `mobile-navigation` (off-canvas drawer)
+
+Reference them from the main README as, for example:
+
+```markdown
+![Dashboard](screenshots/v2/desktop-dashboard.png)
+```
