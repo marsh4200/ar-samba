@@ -12,6 +12,12 @@
   password; a hand-written `smb.conf` stanza is commented out once its share
   is adopted, so it isn't defined twice
 - New endpoints: `GET /api/discovery/scan`, `POST /api/discovery/import`
+- Fix: the scan now runs `pdbedit` and `testparm` through the same restricted
+  sudo path as every other privileged read in the app. As shipped initially,
+  `pdbedit -L -v` ran as the unprivileged `sambacontrol` user and couldn't
+  read the passdb backend (root-owned, 0600 by default) — it silently found
+  zero users on every real install. `/etc/sudoers.d/sambacontrol` now
+  whitelists both commands
 
 ## v2.0.0 — 2026-08-11
 
