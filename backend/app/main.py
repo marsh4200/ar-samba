@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.requests import Request
 
 from app import __version__
-from app.api import auth, health, logs, shares, system, updates, users
+from app.api import auth, discovery, health, logs, shares, system, updates, users
 from app.core.config import get_settings
 from app.core.database import init_db
 from app.core.logging_setup import setup_logging
@@ -65,6 +65,7 @@ app.include_router(health.router, prefix=API)
 app.include_router(auth.router, prefix=API)
 app.include_router(users.router, prefix=API)
 app.include_router(shares.router, prefix=API)
+app.include_router(discovery.router, prefix=API)
 app.include_router(system.router, prefix=API)
 app.include_router(logs.router, prefix=API)
 app.include_router(updates.router, prefix=API)

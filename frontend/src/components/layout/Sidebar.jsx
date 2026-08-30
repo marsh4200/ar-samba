@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, FolderTree, Users, ScrollText, Settings,
+  LayoutDashboard, FolderTree, Users, ScrollText, Settings, ScanSearch,
   PanelLeftClose, PanelLeftOpen, X, Cpu, MemoryStick,
 } from 'lucide-react';
 import { BrandMark, Wordmark } from '@/components/brand/Logo';
@@ -20,6 +20,7 @@ const NAV_GROUPS = [
       { to: '/',       label: 'Dashboard', icon: LayoutDashboard, end: true },
       { to: '/shares', label: 'Shares',    icon: FolderTree },
       { to: '/users',  label: 'Users',     icon: Users },
+      { to: '/import', label: 'Import',    icon: ScanSearch },
     ],
   },
   {

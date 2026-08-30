@@ -120,6 +120,48 @@ files inherit it.
 
 ---
 
+## Discovery / import
+
+Finds shares and Samba users that exist outside SambaControl — e.g. Samba
+was configured by hand over SSH before SambaControl was installed — and
+adopts them into the database on request.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/api/discovery/scan` | Diff live Samba state (`testparm -s`, `pdbedit -L -v`) against the DB |
+| `POST` | `/api/discovery/import` | Adopt selected shares/users found by the scan |
+
+**Scan response:**
+```json
+{
+  "scanned_at": "2026-08-30T12:00:00Z",
+  "shares": [
+    {"name": "oldshare", "path": "/srv/data/oldshare", "comment": "Hand-configured share",
+     "browseable": true, "read_only": false, "guest_ok": false, "valid_users": ["bob"]}
+  ],
+  "users": [
+    {"username": "bob", "display_name": "Bob Smith", "enabled": true}
+  ],
+  "shares_error": null,
+  "users_error": null
+}
+```
+
+**Import body:**
+```json
+{ "usernames": ["bob"], "share_names": ["oldshare"] }
+```
+
+Import re-verifies every name against a fresh scan rather than trusting the
+request body, and never modifies a share's directory, its files, or its
+POSIX permissions — an adopted user keeps its existing Samba password, and
+an adopted share keeps whatever access it already had (recorded as grants
+from its `valid users` line, not re-applied as ACLs). When a share is
+defined directly in `smb.conf`, its original stanza is commented out so it
+isn't defined twice once SambaControl's managed include also serves it.
+
+---
+
 ## System
 
 | Method | Path | Description |

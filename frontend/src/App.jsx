@@ -9,6 +9,7 @@ import Setup from '@/pages/Setup';
 import Dashboard from '@/pages/Dashboard';
 import Users from '@/pages/Users';
 import Shares from '@/pages/Shares';
+import ImportPage from '@/pages/Import';
 import Logs from '@/pages/Logs';
 import Settings from '@/pages/Settings';
 
@@ -55,6 +56,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="users"    element={<Users />} />
           <Route path="shares"   element={<Shares />} />
+          <Route path="import"   element={<ImportPage />} />
           <Route path="logs"     element={<Logs />} />
           <Route path="settings" element={<Settings />} />
         </Route>
