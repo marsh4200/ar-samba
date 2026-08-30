@@ -114,7 +114,11 @@ def scan_shares() -> tuple[list[DiscoveredShare], str | None]:
     """
     settings = get_settings()
     try:
-        result = run(["testparm", "-s", str(settings.smb_conf)], check=False, timeout=15)
+        # Some installs lock smb.conf down tighter than the Debian/Ubuntu
+        # default 0644 (e.g. 0640 root:root) — go through sudo like every
+        # other read of a root-owned Samba file in this codebase, rather
+        # than assuming the sambacontrol service user can read it directly.
+        result = run(["testparm", "-s", str(settings.smb_conf)], check=False, timeout=15, sudo=True)
     except CommandError as e:
         return [], f"Could not run testparm: {e}"
 
@@ -153,9 +157,15 @@ def scan_shares() -> tuple[list[DiscoveredShare], str | None]:
 
 
 def scan_users() -> tuple[list[DiscoveredUser], str | None]:
-    """List Samba passdb accounts directly, via `pdbedit -L -v`."""
+    """List Samba passdb accounts directly, via `pdbedit -L -v`.
+
+    The passdb backend (typically /var/lib/samba/private/passdb.tdb) is
+    root-owned and 0600 by default specifically to protect password hashes —
+    the unprivileged sambacontrol service user cannot read it directly, so
+    this has to go through sudo like every other privileged action here.
+    """
     try:
-        result = run(["pdbedit", "-L", "-v"], check=False, timeout=15)
+        result = run(["pdbedit", "-L", "-v"], check=False, timeout=15, sudo=True)
     except CommandError as e:
         return [], f"Could not run pdbedit: {e}"
 

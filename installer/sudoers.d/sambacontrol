@@ -25,6 +25,14 @@ sambacontrol ALL=(root) NOPASSWD: /bin/chown
 sambacontrol ALL=(root) NOPASSWD: /usr/bin/chmod
 sambacontrol ALL=(root) NOPASSWD: /bin/chmod
 
+# --- Legacy config discovery (read-only) ---
+# testparm reads smb.conf, pdbedit reads the passdb backend
+# (/var/lib/samba/private/passdb.tdb) — both root-owned on a hardened box.
+sambacontrol ALL=(root) NOPASSWD: /usr/bin/testparm
+sambacontrol ALL=(root) NOPASSWD: /usr/sbin/testparm
+sambacontrol ALL=(root) NOPASSWD: /usr/bin/pdbedit
+sambacontrol ALL=(root) NOPASSWD: /usr/sbin/pdbedit
+
 # --- Config file writes (atomic install via temp file) ---
 sambacontrol ALL=(root) NOPASSWD: /usr/bin/install
 
