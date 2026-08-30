@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+**Import existing config**
+
+- New **Import** page: scans the live Samba config (`testparm -s`) and
+  password database (`pdbedit -L -v`) for shares and users that were set up
+  outside SambaControl — e.g. Samba configured by hand over SSH — and lets
+  you pull the ones you pick into the database
+- Adopting a share or user never touches its files, permissions, or Samba
+  password; a hand-written `smb.conf` stanza is commented out once its share
+  is adopted, so it isn't defined twice
+- New endpoints: `GET /api/discovery/scan`, `POST /api/discovery/import`
+
 ## v2.0.0 — 2026-08-11
 
 A full redesign of the web interface. **No existing API, backend behaviour or
